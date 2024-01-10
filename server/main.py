@@ -1,40 +1,96 @@
+import socket
 from ssl import SSLContext, PROTOCOL_TLS_SERVER
-import socketserver
-from socketserver import BaseServer
+import threading
+import logging
+import json
+
+# Create a logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Create a console handler
+handler = logging.StreamHandler()
+handler.setLevel(logging.INFO)
+
+# Create a formatter
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Add the formatter to the handler
+handler.setFormatter(formatter)
+
+# Add the handler to the logger
+logger.addHandler(handler)
 
 
-class MyTCPHandler(socketserver.BaseRequestHandler):
+class ClientUtils:
 
-    def setup(self):
-        print("Connection established:", self.client_address)
-        super().setup()
+    @staticmethod
+    def recv_command(conn: socket.socket):
+        data = conn.recv(10)
+        if not data:
+            return False, "Disconnected"
 
-    def handle(self):
-        # self.request is the SSL-wrapped socket
-        self.data = self.request.recv(1024).strip()
-        # print("{} wrote:".format(self.client_address[0]))
-        print(self.data)
-        # just send back the same data, but upper-cased
-        self.request.sendall(self.data.upper())
+        try:
+            data = data.decode()
+            data = data.strip()
+            data = int(data)
+        except:
+            logger.error('Invalid length: %s', data)
+            return False, "Invalid length"
 
-    def finish(self):
-        print("Connection closed:", self.client_address)
-        super().finish()
+        command_length = data
+        if command_length <= 0:
+            logger.error('Invalid length: %s', command_length)
+            return False, "Invalid length"
+
+        data = conn.recv(command_length)
+        if not data:
+            logger.error('Disconnected')
+            return False, "Disconnected"
+        try:
+            data = data.decode()
+            command = json.loads(data)
+        except:
+            logger.error('Invalid command: %s', data)
+            return False, "Invalid command"
+
+        return True, command
+
+
+def handle_client(conn, addr):
+    logger.info('Connected by %s', addr)
+    while True:
+        good, command = ClientUtils.recv_command(conn)
+        if not good and command == "Disconnected":
+            break
+        elif not good:
+            continue
+
+        logger.info('%s Received: %s', addr, json.dumps(command))
+    conn.close()
+
+
+class Server:
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+
+    def run(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((self.host, self.port))
+            s.listen()
+            context = SSLContext(PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(
+                certfile='secret/cert.pem', keyfile='secret/key.pem')
+            while True:
+                conn, addr = s.accept()
+                with context.wrap_socket(conn, server_side=True) as secure_conn:
+                    threading.Thread(target=handle_client,
+                                     args=(secure_conn, addr)).start()
 
 
 if __name__ == "__main__":
     HOST, PORT = "127.0.0.1", 9999
-
-    # Create the server
-    server = socketserver.TCPServer((HOST, PORT), MyTCPHandler)
-
-    # Create a new SSL context
-    context = SSLContext(PROTOCOL_TLS_SERVER)
-    context.load_cert_chain(certfile='secret/cert.pem',
-                            keyfile='secret/key.pem')
-
-    # Wrap the server socket with SSL
-    server.socket = context.wrap_socket(server.socket, server_side=True)
-
-    # Activate the server
-    server.serve_forever()
+    server = Server(HOST, PORT)
+    server.run()
