@@ -46,10 +46,10 @@ class ClientUtils:
 
         data = conn.recv(command_length)
         if not data:
-            logger.error('Disconnected')
             return False, "Disconnected"
+
         try:
-            data = data.decode()
+            data = data.decode(encoding='utf-8')
             command = json.loads(data)
         except:
             logger.error('Invalid command: %s', data)
@@ -57,9 +57,33 @@ class ClientUtils:
 
         return True, command
 
+    @staticmethod
+    def run_command(command: dict):
+        if 'command' not in command:
+            logger.error('No command')
+            return False, "No command"
 
-def handle_client(conn, addr):
-    logger.info('Connected by %s', addr)
+        if 'data' not in command:
+            logger.error('Invalid command: %s', command)
+            return False, "Invalid command"
+
+        return True, command['command'], command['data']
+
+    @staticmethod
+    def create(username):
+        pass
+
+    @staticmethod
+    def set(command):
+        pass
+
+    @staticmethod
+    def create(command):
+        pass
+
+
+def handle_client(conn: socket, addr: str):
+    logger.info('%s is connected', addr)
     while True:
         good, command = ClientUtils.recv_command(conn)
         if not good and command == "Disconnected":
@@ -67,7 +91,10 @@ def handle_client(conn, addr):
         elif not good:
             continue
 
-        logger.info('%s Received: %s', addr, json.dumps(command))
+        logger.info('%s Received: %s', addr, json.dumps(
+            command, ensure_ascii=False))
+
+    logger.info('%s Disconnect', addr)
     conn.close()
 
 
@@ -78,16 +105,16 @@ class Server:
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind((self.host, self.port))
-            s.listen()
             context = SSLContext(PROTOCOL_TLS_SERVER)
             context.load_cert_chain(
                 certfile='secret/cert.pem', keyfile='secret/key.pem')
-            while True:
-                conn, addr = s.accept()
-                with context.wrap_socket(conn, server_side=True) as secure_conn:
+            with context.wrap_socket(s, server_side=True) as secure_conn:
+                secure_conn.bind((self.host, self.port))
+                secure_conn.listen()
+                while True:
+                    conn, addr = secure_conn.accept()
                     threading.Thread(target=handle_client,
-                                     args=(secure_conn, addr)).start()
+                                     args=(conn, addr)).start()
 
 
 if __name__ == "__main__":
