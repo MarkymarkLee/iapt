@@ -13,9 +13,9 @@ Interactive python development tool
 #### How to use
 
 ```python
-iapt.connect(username: str, password: str, debug=True) # Connect to the server
-iapt.send_output(string, should_notify=False) # print output to app and maybe notify user
-iapt.progressbar(text, [@iterable]) # something like tqdm
+iapt.connect(api-key: str, debug=True, message_lines=3) # Connect to the server
+iapt.print(string, should_notify=False) # print output to app and maybe notify user
+# iapt.progressbar(text, [@iterable]) # something like tqdm
 iapt.choices(text, variable_name, choices=[@iterable]) # lets user choose sth as input
 iatp.read_input(text, variable_name) # lets user send in inputs
 ```

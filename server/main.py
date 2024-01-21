@@ -4,6 +4,8 @@ import threading
 import logging
 import json
 
+COMMAND_LEN_SIZE = 10
+
 # Create a logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -27,7 +29,11 @@ class ClientUtils:
 
     @staticmethod
     def recv_command(conn: socket.socket):
-        data = conn.recv(10)
+        try:
+            data = conn.recv(COMMAND_LEN_SIZE)
+        except ConnectionResetError:
+            logger.error('Connection reset by peer')
+            return False, "Disconnected"
         if not data:
             return False, "Disconnected"
 
@@ -44,7 +50,11 @@ class ClientUtils:
             logger.error('Invalid length: %s', command_length)
             return False, "Invalid length"
 
-        data = conn.recv(command_length)
+        try:
+            data = conn.recv(command_length)
+        except ConnectionResetError:
+            logger.error('Connection reset by peer')
+            return False, "Disconnected"
         if not data:
             return False, "Disconnected"
 
@@ -63,11 +73,7 @@ class ClientUtils:
             logger.error('No command')
             return False, "No command"
 
-        if 'data' not in command:
-            logger.error('Invalid command: %s', command)
-            return False, "Invalid command"
-
-        return True, command['command'], command['data']
+        return True, command['command']
 
     @staticmethod
     def create(username):
@@ -89,7 +95,7 @@ def handle_client(conn: socket, addr: str):
         if not good and command == "Disconnected":
             break
         elif not good:
-            continue
+            break
 
         logger.info('%s Received: %s', addr, json.dumps(
             command, ensure_ascii=False))
